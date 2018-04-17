@@ -13,10 +13,15 @@
 typedef struct process { // struct for storing the data of a process
 	char proc_id; // process id 
 	int p_mem; // number of memory frames
-	int size; // number of time pairs 
-	int* arr_time; // arrival times
-	int* run_time; // run times
+	int arr_time; // arrival time
+	int run_time; // run time
 } process;
+
+typedef struct memory {
+	char** mem;
+	int frames_per_line;
+	int lines;
+} memory;
 
 void error() { // outputs error
 	perror("ERROR");
@@ -24,27 +29,21 @@ void error() { // outputs error
 }
 
 void debugPrintProcesses(process** processes, int n) {
-	int i,j;
+	int i;
 	for (i = 0; i < n; i++) {
-		printf("%c %5d",(*processes)[i].proc_id,(*processes)[i].p_mem);
+		printf("%c %5d%3c%5d/%-5d\n",(*processes)[i].proc_id,(*processes)[i].p_mem,' ',(*processes)[i].arr_time,(*processes)[i].run_time);
 		fflush(stdout);
-		for (j = 0; j < (*processes)[i].size; j++) {
-			printf(" %5d/%-5d",(*processes)[i].arr_time[j],(*processes)[i].run_time[j]);
-			fflush(stdout);
-		}
-		printf("\n");
-		fflush(stdout);	
 	}
 	printf("\n");
 	fflush(stdout);	
 }
 
-void freeProcesses(process** processes, int n) {
-	int i;
-	for (i = 0; i < n; i++) {
-		free((*processes)[i].arr_time);
-		free((*processes)[i].run_time);
-	}
+int comparator(const void* a, const void* b) { // comparator to handle ties
+	process p = *((process*) a);
+	process q = *((process*) b);
+	int diff = p.arr_time - q.arr_time;
+	if (diff == 0) return p.proc_id - q.proc_id;
+	return diff;
 }
 
 process* fileParser(int* n, const char** arg1) { // parses file into process struct
@@ -59,12 +58,10 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 	memset(buffer,'\0',100);
 	while (fgets(buffer,100,inputFile) != NULL) { // reads line from file, buffering 100 characters
 		if (isalpha(buffer[0])) { // checks to see if line can be parsed
-			int i, j, k = 0, capacity = 10, len = strlen(buffer);
+			int i, j, multiple_times = 0, len = strlen(buffer);
 			char* buffer2 = (char*)calloc(len,sizeof(char));
 			memset(buffer2,'\0',len);
 			processes[*n].proc_id = buffer[0];
-			processes[*n].arr_time = (int*)calloc(capacity,sizeof(int));
-			processes[*n].run_time = (int*)calloc(capacity,sizeof(int));
 			for (i = 1; i < len; i++) if (isdigit(buffer[i])) break; // sets i to p_mem starting digit position
 			for (j = 0; i < len; i++,j++) {
 				if (isdigit(buffer[i])) buffer2[j] = buffer[i];
@@ -75,15 +72,15 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 				memset(buffer2,'\0',len);
 				for (++i; i < len; i++) if (isdigit(buffer[i])) break; // sets i to arr_time starting digit position
 				if (i >= len) break;
+				if (multiple_times) {
+					(*n)++;
+					processes[*n].proc_id = processes[*n - 1].proc_id;
+					processes[*n].p_mem = processes[*n - 1].p_mem;
+				}
 				for (j = 0; j < len; i++,j++) {
 					if (isdigit(buffer[i])) buffer2[j] = buffer[i];
 					else {
-						if (k >= capacity) {
-							capacity += 10;
-							processes[*n].arr_time = realloc(processes[*n].arr_time, (capacity) * (sizeof(int)));
-							processes[*n].run_time = realloc(processes[*n].run_time, (capacity) * (sizeof(int)));
-						}
-						processes[*n].arr_time[k] = atoi(buffer2);
+						processes[*n].arr_time = atoi(buffer2);
 						break;
 					}
 				}
@@ -92,16 +89,13 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 				for (j = 0; j < len; i++,j++) {
 					if (isdigit(buffer[i])) buffer2[j] = buffer[i];
 					else {
-						processes[*n].run_time[k] = atoi(buffer2);
-						k++;
+						processes[*n].run_time = atoi(buffer2);
+						multiple_times = 1;
 						break;
 					}
 				}
 			} while (i < len);
 			free(buffer2);
-			processes[*n].size = k;
-			processes[*n].arr_time = realloc(processes[*n].arr_time, k * (sizeof(int)));
-			processes[*n].run_time = realloc(processes[*n].run_time, k * (sizeof(int)));
 			(*n)++;
 		}
 	}
@@ -109,13 +103,16 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 	#ifdef DEBUG_MODE
 		printf("\nprocesses parsed: %d\n",*n);
 		debugPrintProcesses(&processes,*n);
+		qsort(processes,*n,sizeof(process),comparator);
+		printf("\nsorted processes parsed: %d\n",*n);
+		debugPrintProcesses(&processes,*n);
 	#endif
 	fclose(inputFile);
 	free(buffer);
 	return processes;
 }
 /*
-void FCFS(process** processes, int n, int t_cs, float* sum_wait_time, float* sum_turnaround_time, int* context_swtiches) { // First Come First Serve Algorithm
+void best_fit(process** processes, int n, int t_memmove) {
 	int i, real_t = 0, change = 0, terminated = 0, context_switching = 0, ready_capacity = 0, wait_capacity = 0;
 	process** ready_queue = createQueue(n);
 	process** wait_array = createQueue(n);
@@ -265,7 +262,6 @@ int main(int argc, char const *argv[]) {
 	int n = 0; // the number of processes to simulate
 	// int t_memmove = 1; // time required to move one frame of memory (in milliseconds)
 	process* processes = fileParser(&n, &argv[1]);
-	freeProcesses(&processes,n);
 	free(processes);
 	return EXIT_SUCCESS;
 }
