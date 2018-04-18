@@ -9,10 +9,8 @@
 
 #define FRAMES_PER_LINE 32
 #define LINES 8
-#define READY 0
+#define ARRIVING 0
 #define RUNNING 1
-#define BLOCKED 2
-#define ARRIVING 3
 
 typedef struct process { // struct for storing the data of a process
 	char proc_id; // process id 
@@ -67,6 +65,16 @@ char** createBoard() { // creates board
 	return board;
 }
 
+void freeBoard(char*** board) { // frees the board
+	int i;
+	for (i = 0; i < LINES; i++) {
+		free((*board)[i]);
+		(*board)[i] = NULL;
+	}
+	free(*board);
+	(*board) = NULL;
+}
+
 void printBoard(char*** board) {
 	int i;
 	for (i = 0; i < FRAMES_PER_LINE; i++) printf("=");
@@ -77,7 +85,16 @@ void printBoard(char*** board) {
 	fflush(stdout);
 }
 
-position findBestFitPosition(char*** board, int frames) {
+void resize(process** processes, int* capacity) { // increases array size by 100
+	*capacity += 100;
+	*processes = realloc(*processes, (*capacity) * (sizeof(process)));
+}
+
+position findNextFitPosition(char*** board, int frames, position last) { // TODO: implement code for next-fit, returning the starting position of the first free partition after the end of the last placed process
+	return (position){};
+}
+
+position findBestFitPosition(char*** board, int frames) { // best-fit algorithm for returning the starting position of the smallest fitting free partition
 	char ** temp = *board;
 	int i,j;
 	int min_size = 257, size = 0, free_space = 0;
@@ -105,7 +122,35 @@ position findBestFitPosition(char*** board, int frames) {
 	}
 }
 
-int defragmentation(char*** board, process** processes, int n, int t) { // defragments memory and returns amount of frames moved
+position findWorstFitPosition(char*** board, int frames) {  // worst-fit algorithm for returning the starting position of the largest fitting free partition
+	char ** temp = *board;
+	int i,j;
+	int max_size = 0, size = 0, free_space = 0;
+	position pos = {.x = 0, .y = 0};
+	for (i = 0; i < LINES; i++) {
+		for (j = 0; j < FRAMES_PER_LINE; j++) {
+			if (temp[i][j] == '.') { // if space is empty
+				++size;
+				++free_space;
+			} else { // if space is used
+				if (size != 0) { // free space ends
+					if (max_size < size && size >= frames) {
+						max_size = size;
+						pos = (position){.x = (((FRAMES_PER_LINE * i) + j - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * i) + j - size) % FRAMES_PER_LINE)}; // obtains the first free space position in free space segment
+					} else size = 0; // moving through used memory
+				}
+			}
+		}
+	}
+	if (max_size < size && size >= frames) return (position){.x = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) % FRAMES_PER_LINE)}; // if very last free space is sufficient
+	if (max_size != 0 && max_size >= frames) return pos; // if changed minimum size position meets criteria
+	else {
+		if (free_space >= frames) return (position){.x = -2, .y = -2}; // defragment memory
+		return (position){.x = -1, .y = -1}; // no space left for process
+	}
+}
+
+void defragmentation(char*** board, process** processes, int n, int* t) { // defragments memory
 	int i, j, k, first_space = 0, moves = 0, id_found = 1, size = 0;
 	position free_pos = (position){.x = 0, .y = 0};
 	char* ids = (char*)calloc(n,sizeof(char));
@@ -132,12 +177,13 @@ int defragmentation(char*** board, process** processes, int n, int t) { // defra
 			}
 		}
 	}
-	printf("time %dms: Defragmentation complete (moved %d frames:",t,moves);
+	*t += moves;
+	printf("time %dms: Defragmentation complete (moved %d frames:",*t,moves);
 	for (k = 0; k < size; k++) printf(" %c%s",ids[k], k == size - 1 ? ")\n" : ",");
 	fflush(stdout);
 	free(ids);
 	char last_id = '.';
-	for (i = 0; i < LINES; i++) { // resets process staring positions, arrival times, and update times
+	for (i = 0; i < LINES; i++) { // resets all moved process staring positions
 		for (j = 0; j < FRAMES_PER_LINE; j++) {
 			if ((*board)[i][j] != last_id) {
 				for (k = 0; k < n; k++) {
@@ -145,18 +191,19 @@ int defragmentation(char*** board, process** processes, int n, int t) { // defra
 						last_id = (*board)[i][j];
 						(*processes)[k].x = i;
 						(*processes)[k].y = j;
-						(*processes)[k].arr_time += moves;
-						(*processes)[k].update_time += moves;
 						break;
 					}
 				}
 			}
 		}
 	}
-	return moves;
+	for (k = 0; k < n; k++) { // resets all process arrival times and update times
+		(*processes)[k].arr_time += moves;
+		if ((*processes)[k].state == RUNNING) (*processes)[k].update_time += moves;
+	}
 }
 
-void markBoard(char*** board, position pos, char id, int frames) {
+void placeProcess(char*** board, position pos, char id, int frames) { // places process in memory board
 	int i, j, counter = 0, start = 1;
 	for (i = start == 1 ? pos.x : 0; i < LINES && counter < frames; i++) {
 		for (j = start == 1 ? pos.y : 0; j < FRAMES_PER_LINE && counter < frames; j++) {
@@ -168,18 +215,20 @@ void markBoard(char*** board, position pos, char id, int frames) {
 	printBoard(board);
 }
 
-process* fileParser(int* n, const char** arg1) { // parses file into process struct
+process* fileParser(int* n, const char** arg1) { // parses file into process struct array
 	FILE* inputFile = NULL;
 	inputFile = fopen(*arg1,"r");
 	if (inputFile == NULL) {
 		fprintf(stderr, "ERROR: Invalid input file format\n");
 		exit(EXIT_FAILURE);
 	}
-	process* processes = (process*)calloc(26,sizeof(process));
+	int capacity = 100;
+	process* processes = (process*)calloc(capacity,sizeof(process));
 	char* buffer = (char*)calloc(100,sizeof(char));
 	memset(buffer,'\0',100);
 	while (fgets(buffer,100,inputFile) != NULL) { // reads line from file, buffering 100 characters
 		if (isalpha(buffer[0])) { // checks to see if line can be parsed
+			if (*n >= capacity) resize(&processes,&capacity);
 			int i, j, multiple_times = 0, len = strlen(buffer);
 			char* buffer2 = (char*)calloc(len,sizeof(char));
 			memset(buffer2,'\0',len);
@@ -198,6 +247,7 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 				if (i >= len) break;
 				if (multiple_times) {
 					(*n)++;
+					if (*n >= capacity) resize(&processes,&capacity);
 					processes[*n].proc_id = processes[*n - 1].proc_id;
 					processes[*n].frames = processes[*n - 1].frames;
 					processes[*n].state = ARRIVING;
@@ -225,7 +275,7 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 			(*n)++;
 		}
 	}
-	processes = (process*)realloc(processes, (*n) * (sizeof(process)));
+	if (*n < capacity) processes = (process*)realloc(processes, (*n) * (sizeof(process)));
 	#ifdef DEBUG_MODE
 		printf("\nprocesses parsed: %d\n",*n);
 		debugPrintProcesses(&processes,*n);
@@ -238,45 +288,27 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 	return processes;
 }
 
-void best_fit(process** parsed_processes, int n, int t_memmove) {
-	int i, j, t = 0, terminated = 0;
-	process* processes = (process*)calloc(n,sizeof(process));
-	memcpy(&processes,parsed_processes,sizeof(process*));
-	#ifdef DEBUG_MODE
-		printf("\nprocesses copied: %d\n",n);
-		debugPrintProcesses(&processes,n);
-	#endif
-	memory* mem = (memory*)calloc(1,sizeof(memory));
-	mem->board = createBoard();
-	printf("time %dms: Simulator started (Contiguous -- Best-Fit)\n",t);
-	fflush(stdout);
-	while (terminated < n) {
-		for (i = 0; i < n - terminated; i++) { // loop for processes arriving and entering the CPU
-			if (processes[i].update_time == t && processes[i].state == RUNNING) {
-				printf("time %dms: Process %c removed:\n",t,processes[i].proc_id);
-				fflush(stdout);
-				position pos = (position){.x = processes[i].x, .y = processes[i].y};
-				markBoard(&(mem->board),pos,'.',processes[i].frames);
-				#ifdef DEBUG_MODE
-					printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
-					debugPrintProcesses(&processes,n - terminated);
-				#endif
-				for (j = i; j < n - terminated - 1; j++) processes[j] = processes[j+1];
-				--i;
-				++terminated;
-				#ifdef DEBUG_MODE
-					printf("\ntime %dms: processes after remove: %d\n",t,n - terminated);
-					debugPrintProcesses(&processes,n - terminated);
-				#endif
-				continue;
-			}
-			if (processes[i].arr_time == t && processes[i].state == ARRIVING) { // process has arrived 
-				printf("time %dms: Process %c arrived (requires %d frames)\n",t,processes[i].proc_id,processes[i].frames);
-				fflush(stdout);
-				position pos = findBestFitPosition(&(mem->board),processes[i].frames);
-				if (pos.x == -1 && pos.y == -1) { // case where there is no space for process to take
-					printf("time %dms: Cannot place process %c -- skipped!\n",t,processes[i].proc_id);
+void contiguous(process** parsed_processes, int n, int t_memmove) { // simulates contiguous memory management
+	int alg = 1; // TODO: set to 0 when next-fit function added
+	for (; alg < 3; alg++) { // loops though placement simulations. alg = 0 = next-fit, alg = 1 = best-fit, alg = 2 = worst-fit
+		int i, j, t = 0, terminated = 0;
+		process* processes = (process*)calloc(n,sizeof(process));
+		memcpy(processes,*parsed_processes,sizeof(process) * n);
+		#ifdef DEBUG_MODE
+			printf("\nprocesses copied: %d\n",n);
+			debugPrintProcesses(&processes,n);
+		#endif
+		memory* mem = (memory*)calloc(1,sizeof(memory));
+		mem->board = createBoard();
+		printf("time %dms: Simulator started (Contiguous -- %s)\n",t, alg == 0 ? "Next-Fit" : alg == 1 ? "Best-Fit" : "Worst-Fit");
+		fflush(stdout);
+		while (terminated < n) { // begins simulation
+			for (i = 0; i < n - terminated; i++) { // loop for processes leaving
+				if (processes[i].update_time == t && processes[i].state == RUNNING) {
+					printf("time %dms: Process %c removed:\n",t,processes[i].proc_id);
 					fflush(stdout);
+					position pos = (position){.x = processes[i].x, .y = processes[i].y};
+					placeProcess(&(mem->board),pos,'.',processes[i].frames);
 					#ifdef DEBUG_MODE
 						printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
 						debugPrintProcesses(&processes,n - terminated);
@@ -289,37 +321,72 @@ void best_fit(process** parsed_processes, int n, int t_memmove) {
 						debugPrintProcesses(&processes,n - terminated);
 					#endif
 					continue;
-				} else { // process can be placed without defragmentation
-					if (pos.x == -2 && pos.y == -2) { // case where if memory is defragmented, then the process can enter
-						printf("time %dms: Cannot place process %c -- starting defragmentation\n",t,processes[i].proc_id);
-						fflush(stdout);
-						defragmentation(&(mem->board),&processes,n-terminated,t);
-						#ifdef DEBUG_MODE
-							printf("\nDefragmentation:\n");
-							printBoard(&(mem->board));
-							printf("\n");
-						#endif
-						pos = findBestFitPosition(&(mem->board),processes[i].frames);
-					}
-					printf("time %dms: Placed process %c:\n",t,processes[i].proc_id);
-					fflush(stdout);
-					processes[i].x = pos.x;
-					processes[i].y = pos.y;
-					processes[i].state = RUNNING;
-					processes[i].update_time = t + processes[i].run_time;
-					markBoard(&(mem->board),pos,processes[i].proc_id,processes[i].frames);
-					#ifdef DEBUG_MODE
-						printf("\ntime %dms: processes updated:\n",t);
-						debugPrintProcesses(&processes,n - terminated);
-					#endif
 				}
 			}
+			for (i = 0; i < n - terminated; i++) { // loop for processes arriving
+				if (processes[i].arr_time == t && processes[i].state == ARRIVING) { // process has arrived 
+					printf("time %dms: Process %c arrived (requires %d frames)\n",t,processes[i].proc_id,processes[i].frames);
+					fflush(stdout);
+					position pos;
+					if (alg == 0) {} // TODO: add next-fit function here
+					else if (alg == 1) pos = findBestFitPosition(&(mem->board),processes[i].frames);
+					else pos = findWorstFitPosition(&(mem->board),processes[i].frames);
+					if (pos.x == -1 && pos.y == -1) { // case where there is no space for process to take
+						printf("time %dms: Cannot place process %c -- skipped!\n",t,processes[i].proc_id);
+						fflush(stdout);
+						#ifdef DEBUG_MODE
+							printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
+							debugPrintProcesses(&processes,n - terminated);
+						#endif
+						for (j = i; j < n - terminated - 1; j++) processes[j] = processes[j+1];
+						--i;
+						++terminated;
+						#ifdef DEBUG_MODE
+							printf("\ntime %dms: processes after remove: %d\n",t,n - terminated);
+							debugPrintProcesses(&processes,n - terminated);
+						#endif
+						continue;
+					} else { // process can be placed without defragmentation
+						if (pos.x == -2 && pos.y == -2) { // case where if memory is defragmented, then the process can enter
+							printf("time %dms: Cannot place process %c -- starting defragmentation\n",t,processes[i].proc_id);
+							fflush(stdout);
+							defragmentation(&(mem->board),&processes,n-terminated,&t);
+							#ifdef DEBUG_MODE
+								printf("\nDefragmentation:\n");
+								printBoard(&(mem->board));
+								printf("\n");
+							#endif
+							if (alg == 0) {} // TODO: add next-fit function here
+							else if (alg == 1) pos = findBestFitPosition(&(mem->board),processes[i].frames);
+							else pos = findWorstFitPosition(&(mem->board),processes[i].frames);
+						}
+						printf("time %dms: Placed process %c:\n",t,processes[i].proc_id);
+						fflush(stdout);
+						processes[i].x = pos.x;
+						processes[i].y = pos.y;
+						processes[i].state = RUNNING;
+						processes[i].update_time = t + processes[i].run_time;
+						placeProcess(&(mem->board),pos,processes[i].proc_id,processes[i].frames);
+						#ifdef DEBUG_MODE
+							printf("\ntime %dms: processes updated:\n",t);
+							debugPrintProcesses(&processes,n - terminated);
+						#endif
+					}
+				}
+			}
+			if (terminated == n) break; // ends simulation when all processes have been terminated
+			t++;
 		}
-		if (terminated == n) break; // ends simulation when all processes have been terminated
-		t++;
+		printf("time %dms: Simulator ended (Contiguous -- %s",t, alg == 0 ? "Next-Fit)\n\n" : alg == 1 ? "Best-Fit)\n\n" : "Worst-Fit)\n");
+		fflush(stdout);
+		free(processes);
+		freeBoard(&(mem->board));
+		free(mem);
 	}
-	printf("time %dms: Simulator ended (Contiguous -- Best-Fit)\n",t);
-	fflush(stdout);
+}
+
+void noncontiguous(process** processes, int n) { // simulates non-contiguous memory managment
+	// TODO
 }
 
 int main(int argc, char const *argv[]) {
@@ -330,7 +397,8 @@ int main(int argc, char const *argv[]) {
 	int n = 0; // the number of processes to simulate
 	int t_memmove = 1; // time required to move one frame of memory (in milliseconds)
 	process* processes = fileParser(&n, &argv[1]);
-	best_fit(&processes,n,t_memmove);
+	contiguous(&processes,n,t_memmove);
+	noncontiguous(&processes,n);
 	free(processes);
 	return EXIT_SUCCESS;
 }
