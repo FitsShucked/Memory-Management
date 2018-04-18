@@ -9,19 +9,32 @@
 
 #define FRAMES_PER_LINE 32
 #define LINES 8
+#define READY 0
+#define RUNNING 1
+#define BLOCKED 2
+#define ARRIVING 3
 
 typedef struct process { // struct for storing the data of a process
 	char proc_id; // process id 
-	int p_mem; // number of memory frames
+	int frames; // number of memory frames
 	int arr_time; // arrival time
 	int run_time; // run time
+	int state; // state process is in
+	int update_time; // time when state is completed
+	int x; // first x posiiton for process segment in memory
+	int y; // first y posiiton for process segment in memory
 } process;
 
 typedef struct memory {
-	char** mem;
-	int frames_per_line;
-	int lines;
+	char** board; // memory board
+	int frames_per_line; // number of frames per line
+	int lines; // number of lines
 } memory;
+
+typedef struct position {
+	int x; // x-coordinate
+	int y; // y-coordinate
+} position;
 
 void error() { // outputs error
 	perror("ERROR");
@@ -30,10 +43,7 @@ void error() { // outputs error
 
 void debugPrintProcesses(process** processes, int n) {
 	int i;
-	for (i = 0; i < n; i++) {
-		printf("%c %5d%3c%5d/%-5d\n",(*processes)[i].proc_id,(*processes)[i].p_mem,' ',(*processes)[i].arr_time,(*processes)[i].run_time);
-		fflush(stdout);
-	}
+	for (i = 0; i < n; i++)	printf("%c %5d%3c%5d/%-5d%5d\n",(*processes)[i].proc_id,(*processes)[i].frames,' ',(*processes)[i].arr_time,(*processes)[i].run_time,(*processes)[i].update_time);
 	printf("\n");
 	fflush(stdout);	
 }
@@ -44,6 +54,118 @@ int comparator(const void* a, const void* b) { // comparator to handle ties
 	int diff = p.arr_time - q.arr_time;
 	if (diff == 0) return p.proc_id - q.proc_id;
 	return diff;
+}
+
+char** createBoard() { // creates board
+	int i;
+	char** board = (char**)calloc(LINES,sizeof(char*));
+	for (i = 0; i < LINES; i++) {
+		board[i] = (char*)calloc(FRAMES_PER_LINE+1,sizeof(char));
+		board[i][FRAMES_PER_LINE] = '\0';
+		memset(board[i],'.',FRAMES_PER_LINE);
+	}
+	return board;
+}
+
+void printBoard(char*** board) {
+	int i;
+	for (i = 0; i < FRAMES_PER_LINE; i++) printf("=");
+	printf("\n");
+	for (i = 0; i < LINES; i++) printf("%s\n",(*board)[i]);
+	for (i = 0; i < FRAMES_PER_LINE; i++) printf("=");
+	printf("\n");
+	fflush(stdout);
+}
+
+position findBestFitPosition(char*** board, int frames) {
+	char ** temp = *board;
+	int i,j;
+	int min_size = 257, size = 0, free_space = 0;
+	position pos = {.x = 0, .y = 0};
+	for (i = 0; i < LINES; i++) {
+		for (j = 0; j < FRAMES_PER_LINE; j++) {
+			if (temp[i][j] == '.') { // if space is empty
+				++size;
+				++free_space;
+			} else { // if space is used
+				if (size != 0) { // free space ends
+					if (min_size > size && size >= frames) {
+						min_size = size;
+						pos = (position){.x = (((FRAMES_PER_LINE * i) + j - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * i) + j - size) % FRAMES_PER_LINE)}; // obtains the first free space position in free space segment
+					} else size = 0; // moving through used memory
+				}
+			}
+		}
+	}
+	if (min_size > size && size >= frames) return (position){.x = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) % FRAMES_PER_LINE)}; // if very last free space is sufficient
+	if (min_size != 257 && min_size >= frames) return pos; // if changed minimum size position meets criteria
+	else {
+		if (free_space >= frames) return (position){.x = -2, .y = -2}; // defragment memory
+		return (position){.x = -1, .y = -1}; // no space left for process
+	}
+}
+
+int defragmentation(char*** board, process** processes, int n, int t) { // defragments memory and returns amount of frames moved
+	int i, j, k, first_space = 0, moves = 0, id_found = 1, size = 0;
+	position free_pos = (position){.x = 0, .y = 0};
+	char* ids = (char*)calloc(n,sizeof(char));
+	for (i = 0; i < LINES; i++) { // defragments memory
+		for (j = 0; j < FRAMES_PER_LINE; j++) {
+			if (!first_space && (*board)[i][j] == '.') {
+				first_space = 1;
+				free_pos = (position){.x = i, .y = j};
+			} else if (first_space && (*board)[i][j] != '.') {
+				first_space = 0;
+				(*board)[free_pos.x][free_pos.y] = (*board)[i][j];
+				(*board)[i][j] = '.';
+				i = free_pos.x;
+				j = free_pos.y;
+				++moves;
+				id_found = 0;
+				for (k = 0; k < n; k++) {
+					if (ids[k] == (*board)[i][j]) {
+						id_found = 1;
+						break;
+					}
+				}
+				if (!id_found) ids[size++] = (*board)[i][j];
+			}
+		}
+	}
+	printf("time %dms: Defragmentation complete (moved %d frames:",t,moves);
+	for (k = 0; k < size; k++) printf(" %c%s",ids[k], k == size - 1 ? ")\n" : ",");
+	fflush(stdout);
+	free(ids);
+	char last_id = '.';
+	for (i = 0; i < LINES; i++) { // resets process staring positions, arrival times, and update times
+		for (j = 0; j < FRAMES_PER_LINE; j++) {
+			if ((*board)[i][j] != last_id) {
+				for (k = 0; k < n; k++) {
+					if ((*processes)[k].proc_id == (*board)[i][j]) {
+						last_id = (*board)[i][j];
+						(*processes)[k].x = i;
+						(*processes)[k].y = j;
+						(*processes)[k].arr_time += moves;
+						(*processes)[k].update_time += moves;
+						break;
+					}
+				}
+			}
+		}
+	}
+	return moves;
+}
+
+void markBoard(char*** board, position pos, char id, int frames) {
+	int i, j, counter = 0, start = 1;
+	for (i = start == 1 ? pos.x : 0; i < LINES && counter < frames; i++) {
+		for (j = start == 1 ? pos.y : 0; j < FRAMES_PER_LINE && counter < frames; j++) {
+			start = 0;
+			(*board)[i][j] = id;
+			counter++;
+		}
+	}
+	printBoard(board);
 }
 
 process* fileParser(int* n, const char** arg1) { // parses file into process struct
@@ -67,7 +189,9 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 				if (isdigit(buffer[i])) buffer2[j] = buffer[i];
 				else break;
 			}
-			processes[*n].p_mem = atoi(buffer2);
+			processes[*n].frames = atoi(buffer2);
+			processes[*n].state = ARRIVING;
+			processes[*n].update_time = 0;
 			do {
 				memset(buffer2,'\0',len);
 				for (++i; i < len; i++) if (isdigit(buffer[i])) break; // sets i to arr_time starting digit position
@@ -75,7 +199,9 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 				if (multiple_times) {
 					(*n)++;
 					processes[*n].proc_id = processes[*n - 1].proc_id;
-					processes[*n].p_mem = processes[*n - 1].p_mem;
+					processes[*n].frames = processes[*n - 1].frames;
+					processes[*n].state = ARRIVING;
+					processes[*n].update_time = 0;
 				}
 				for (j = 0; j < len; i++,j++) {
 					if (isdigit(buffer[i])) buffer2[j] = buffer[i];
@@ -111,157 +237,100 @@ process* fileParser(int* n, const char** arg1) { // parses file into process str
 	free(buffer);
 	return processes;
 }
-/*
-void best_fit(process** processes, int n, int t_memmove) {
-	int i, real_t = 0, change = 0, terminated = 0, context_switching = 0, ready_capacity = 0, wait_capacity = 0;
-	process** ready_queue = createQueue(n);
-	process** wait_array = createQueue(n);
-	process* CPU = NULL;
-	printf("time %dms: Simulator started for FCFS ",real_t);
+
+void best_fit(process** parsed_processes, int n, int t_memmove) {
+	int i, j, t = 0, terminated = 0;
+	process* processes = (process*)calloc(n,sizeof(process));
+	memcpy(&processes,parsed_processes,sizeof(process*));
+	#ifdef DEBUG_MODE
+		printf("\nprocesses copied: %d\n",n);
+		debugPrintProcesses(&processes,n);
+	#endif
+	memory* mem = (memory*)calloc(1,sizeof(memory));
+	mem->board = createBoard();
+	printf("time %dms: Simulator started (Contiguous -- Best-Fit)\n",t);
 	fflush(stdout);
-	printQueue(&ready_queue,ready_capacity);
 	while (terminated < n) {
-		for (i = 0; i < n - terminated; i++) { // loop for processes leaving the CPU and getting blocked
-			if (CPU != NULL && CPU->update_time == real_t && CPU->state == RUNNING) { // process finished with CPU burst
-				if (CPU->num_bursts == 0) {
-					printf("time %dms: Process %c terminated ",real_t,CPU->proc_id);
-					fflush(stdout);
-				} else {
-					printf("time %dms: Process %c completed a CPU burst; %d burst%s to go ",real_t,CPU->proc_id,CPU->num_bursts, CPU->num_bursts == 1 ? "" : "s");
-					fflush(stdout);
-					printQueue(&ready_queue,ready_capacity);
-					printf("time %dms: Process %c switching out of CPU; will block on I/O until time %dms ",real_t,CPU->proc_id,real_t + (t_cs / 2) + CPU->io_time);
-					fflush(stdout);
-				}
-				printQueue(&ready_queue,ready_capacity);
-				CPU->update_time += (t_cs / 2);
-				CPU->state = CS_REMOVE;
-				context_switching = 1;
-				change = 1;
-			}
-			if (CPU != NULL && CPU->update_time == real_t && CPU->state == CS_REMOVE) { // process finished being context switched out of CPU, to be either termianted or blocked
-				if (CPU->num_bursts == 0) terminated++;
-				else {
-					int pos = addProcess(&wait_array,*CPU,n);
-					wait_array[pos]->update_time += wait_array[pos]->io_time;
-					wait_array[pos]->state = BLOCKED;
-					wait_capacity++;
-				}
-				*sum_turnaround_time += real_t - CPU->turnaround_start_time;
-				#ifdef DEBUG_MODE
-					printf("\nturnaround time for %c: %dms\n\n", CPU->proc_id, real_t - CPU->turnaround_start_time);
-					fflush(stdout);
-				#endif
-				context_switching = 0;
-				free(CPU);
-				CPU = NULL;
-				change = 1;
-			}
-			if (wait_array[i] != NULL && wait_array[i]->update_time == real_t && wait_array[i]->state == BLOCKED) { // process is finished with I/O and placed on ready queue
-				int pos = addProcess(&ready_queue,*(wait_array[i]),n);
-				free(wait_array[i]);
-				wait_array[i] = NULL;
-				ready_queue[pos]->turnaround_start_time = real_t;
-				ready_queue[pos]->wait_start_time = real_t;
-				ready_queue[pos]->update_time = real_t;
-				ready_queue[pos]->state = READY;
-				ready_capacity++;
-				wait_capacity--;
-				printf("time %dms: Process %c completed I/O; added to ready queue ",real_t,ready_queue[pos]->proc_id);
-				fflush(stdout);
-				printQueue(&ready_queue,ready_capacity);
-				change = 1;
-			}
-			updateQueue(&ready_queue,n);
-			updateQueue(&wait_array,n);
-		}
 		for (i = 0; i < n - terminated; i++) { // loop for processes arriving and entering the CPU
-			if (CPU != NULL && CPU->update_time == real_t && CPU->state == CS_BRING) { // proccess finished context switching into the CPU
-				printf("time %dms: Process %c started using the CPU ",real_t,CPU->proc_id);
+			if (processes[i].update_time == t && processes[i].state == RUNNING) {
+				printf("time %dms: Process %c removed:\n",t,processes[i].proc_id);
 				fflush(stdout);
-				printQueue(&ready_queue,ready_capacity);
-				CPU->update_time += CPU->cpu_burst_time;
-				CPU->state = RUNNING;
-				(CPU->num_bursts)--;
-				context_switching = 0;
-				change = 1;
-			}
-			if (ready_queue[i] != NULL && ready_queue[i]->update_time - (t_cs / 2) + 1 == real_t && ready_queue[i]->state == CS_BRING) { // process moves out of the ready queue, context switching into the CPU
-				CPU = (process*)calloc(1,sizeof(process));
-				memcpy(CPU,ready_queue[i],sizeof(process));
-				free(ready_queue[i]);
-				ready_queue[i] = NULL;
-				ready_capacity--;
-				updateQueue(&ready_queue,n);
-				change = 1;
-			}
-			if ((*processes)[i].initial_arrive_time == real_t && (*processes)[i].state == ARRIVING) { // process has arrived 
-				int pos = addProcess(&ready_queue,(*processes)[i],n);
-				ready_queue[pos]->turnaround_start_time = real_t;
-				ready_queue[pos]->wait_start_time = real_t;
-				ready_queue[pos]->update_time = real_t;
-				ready_queue[pos]->state = READY;
-				ready_capacity++;
-				printf("time %dms: Process %c arrived and added to ready queue ",real_t,ready_queue[pos]->proc_id);
-				fflush(stdout);
-				printQueue(&ready_queue,ready_capacity);
-				change = 1;
-			}
-			if (CPU == NULL && context_switching == 0 && ready_queue[i] != NULL && ready_queue[i]->state == READY) { // process is able to use the CPU, beginning to context switch
-				*sum_wait_time += real_t - ready_queue[i]->wait_start_time;
+				position pos = (position){.x = processes[i].x, .y = processes[i].y};
+				markBoard(&(mem->board),pos,'.',processes[i].frames);
 				#ifdef DEBUG_MODE
-					printf("\nwait time for %c: %dms\n\n", ready_queue[i]->proc_id, real_t - ready_queue[i]->wait_start_time);
-					fflush(stdout);
+					printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
+					debugPrintProcesses(&processes,n - terminated);
 				#endif
-				(*context_swtiches)++;
-				context_switching = 1;
-				ready_queue[i]->state = CS_BRING;
-				ready_queue[i]->update_time = real_t + (t_cs / 2);
-				change = 1;
+				for (j = i; j < n - terminated - 1; j++) processes[j] = processes[j+1];
+				--i;
+				++terminated;
+				#ifdef DEBUG_MODE
+					printf("\ntime %dms: processes after remove: %d\n",t,n - terminated);
+					debugPrintProcesses(&processes,n - terminated);
+				#endif
+				continue;
 			}
-			updateQueue(&ready_queue,n);
-		}
-		if (change) { // if a process has been updated
-			change = 0;
-			qsort(ready_queue,ready_capacity,sizeof(process*),comparator); // clears ties
-			#ifdef DEBUG_MODE
-				if (terminated < n) { // debug prints of CPU, ready queue, and wait array
-					printf("\n--- Printing at time %dms\n%s CPU\n",real_t, CPU != NULL ? "Printing" : "Empty");
+			if (processes[i].arr_time == t && processes[i].state == ARRIVING) { // process has arrived 
+				printf("time %dms: Process %c arrived (requires %d frames)\n",t,processes[i].proc_id,processes[i].frames);
+				fflush(stdout);
+				position pos = findBestFitPosition(&(mem->board),processes[i].frames);
+				if (pos.x == -1 && pos.y == -1) { // case where there is no space for process to take
+					printf("time %dms: Cannot place process %c -- skipped!\n",t,processes[i].proc_id);
 					fflush(stdout);
-					if (CPU != NULL) {
-						process** temp = &CPU;
-						debugPrintQueue(&temp,1);
-						temp = NULL;
+					#ifdef DEBUG_MODE
+						printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
+						debugPrintProcesses(&processes,n - terminated);
+					#endif
+					for (j = i; j < n - terminated - 1; j++) processes[j] = processes[j+1];
+					--i;
+					++terminated;
+					#ifdef DEBUG_MODE
+						printf("\ntime %dms: processes after remove: %d\n",t,n - terminated);
+						debugPrintProcesses(&processes,n - terminated);
+					#endif
+					continue;
+				} else { // process can be placed without defragmentation
+					if (pos.x == -2 && pos.y == -2) { // case where if memory is defragmented, then the process can enter
+						printf("time %dms: Cannot place process %c -- starting defragmentation\n",t,processes[i].proc_id);
+						fflush(stdout);
+						defragmentation(&(mem->board),&processes,n-terminated,t);
+						#ifdef DEBUG_MODE
+							printf("\nDefragmentation:\n");
+							printBoard(&(mem->board));
+							printf("\n");
+						#endif
+						pos = findBestFitPosition(&(mem->board),processes[i].frames);
 					}
-					printf("%s Ready Queue\n", ready_capacity > 0 ? "Printing" : "Empty");
+					printf("time %dms: Placed process %c:\n",t,processes[i].proc_id);
 					fflush(stdout);
-					if (ready_capacity > 0)	debugPrintQueue(&ready_queue,ready_capacity);
-					printf("%s Wait Array\n", wait_capacity > 0 ? "Printing" : "Empty");
-					fflush(stdout);
-					if (wait_capacity > 0) debugPrintQueue(&wait_array,wait_capacity);
-					printf("--------------------------\n\n");
-					fflush(stdout);
+					processes[i].x = pos.x;
+					processes[i].y = pos.y;
+					processes[i].state = RUNNING;
+					processes[i].update_time = t + processes[i].run_time;
+					markBoard(&(mem->board),pos,processes[i].proc_id,processes[i].frames);
+					#ifdef DEBUG_MODE
+						printf("\ntime %dms: processes updated:\n",t);
+						debugPrintProcesses(&processes,n - terminated);
+					#endif
 				}
-			#endif
+			}
 		}
 		if (terminated == n) break; // ends simulation when all processes have been terminated
-		real_t++;
+		t++;
 	}
-	printf("time %dms: Simulator ended for FCFS\n",real_t);
+	printf("time %dms: Simulator ended (Contiguous -- Best-Fit)\n",t);
 	fflush(stdout);
-	if (CPU != NULL) free(CPU);
-	freeQueue(&ready_queue,n);
-	freeQueue(&wait_array,n);
 }
-*/
+
 int main(int argc, char const *argv[]) {
 	if (argc < 2) { // error handling for command-line arguments
 		fprintf(stderr, "ERROR: Invalid arugment(s)\nUSAGE: ./a.out <input-file>\n");
 		exit(EXIT_FAILURE);
 	}
 	int n = 0; // the number of processes to simulate
-	// int t_memmove = 1; // time required to move one frame of memory (in milliseconds)
+	int t_memmove = 1; // time required to move one frame of memory (in milliseconds)
 	process* processes = fileParser(&n, &argv[1]);
+	best_fit(&processes,n,t_memmove);
 	free(processes);
 	return EXIT_SUCCESS;
 }
