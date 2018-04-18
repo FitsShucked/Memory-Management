@@ -150,7 +150,7 @@ position findWorstFitPosition(char*** board, int frames) {  // worst-fit algorit
 	}
 }
 
-void defragmentation(char*** board, process** processes, int n, int* t) { // defragments memory
+void defragmentation(char*** board, process** processes, int n, int* t, int t_memmove) { // defragments memory
 	int i, j, k, first_space = 0, moves = 0, id_found = 1, size = 0;
 	position free_pos = (position){.x = 0, .y = 0};
 	char* ids = (char*)calloc(n,sizeof(char));
@@ -177,7 +177,7 @@ void defragmentation(char*** board, process** processes, int n, int* t) { // def
 			}
 		}
 	}
-	*t += moves;
+	*t += (moves * t_memmove);
 	printf("time %dms: Defragmentation complete (moved %d frames:",*t,moves);
 	for (k = 0; k < size; k++) printf(" %c%s",ids[k], k == size - 1 ? ")\n" : ",");
 	fflush(stdout);
@@ -198,8 +198,8 @@ void defragmentation(char*** board, process** processes, int n, int* t) { // def
 		}
 	}
 	for (k = 0; k < n; k++) { // resets all process arrival times and update times
-		(*processes)[k].arr_time += moves;
-		if ((*processes)[k].state == RUNNING) (*processes)[k].update_time += moves;
+		(*processes)[k].arr_time += (moves * t_memmove);
+		if ((*processes)[k].state == RUNNING) (*processes)[k].update_time += (moves * t_memmove);
 	}
 }
 
@@ -350,7 +350,7 @@ void contiguous(process** parsed_processes, int n, int t_memmove) { // simulates
 						if (pos.x == -2 && pos.y == -2) { // case where if memory is defragmented, then the process can enter
 							printf("time %dms: Cannot place process %c -- starting defragmentation\n",t,processes[i].proc_id);
 							fflush(stdout);
-							defragmentation(&(mem->board),&processes,n-terminated,&t);
+							defragmentation(&(mem->board),&processes,n-terminated,&t,t_memmove);
 							#ifdef DEBUG_MODE
 								printf("\nDefragmentation:\n");
 								printBoard(&(mem->board));
@@ -377,7 +377,7 @@ void contiguous(process** parsed_processes, int n, int t_memmove) { // simulates
 			if (terminated == n) break; // ends simulation when all processes have been terminated
 			t++;
 		}
-		printf("time %dms: Simulator ended (Contiguous -- %s",t, alg == 0 ? "Next-Fit)\n\n" : alg == 1 ? "Best-Fit)\n\n" : "Worst-Fit)\n");
+		printf("time %dms: Simulator ended (Contiguous -- %s)\n\n",t, alg == 0 ? "Next-Fit" : alg == 1 ? "Best-Fit" : "Worst-Fit");
 		fflush(stdout);
 		free(processes);
 		freeBoard(&(mem->board));
