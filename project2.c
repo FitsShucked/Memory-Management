@@ -181,6 +181,7 @@ void defragmentation(char*** board, process** processes, int n, int* t, int t_me
 	printf("time %dms: Defragmentation complete (moved %d frames:",*t,moves);
 	for (k = 0; k < size; k++) printf(" %c%s",ids[k], k == size - 1 ? ")\n" : ",");
 	fflush(stdout);
+	printBoard(board);
 	free(ids);
 	char last_id = '.';
 	for (i = 0; i < LINES; i++) { // resets all moved process staring positions
@@ -351,11 +352,6 @@ void contiguous(process** parsed_processes, int n, int t_memmove) { // simulates
 							printf("time %dms: Cannot place process %c -- starting defragmentation\n",t,processes[i].proc_id);
 							fflush(stdout);
 							defragmentation(&(mem->board),&processes,n-terminated,&t,t_memmove);
-							#ifdef DEBUG_MODE
-								printf("\nDefragmentation:\n");
-								printBoard(&(mem->board));
-								printf("\n");
-							#endif
 							if (alg == 0) {} // TODO: add next-fit function here
 							else if (alg == 1) pos = findBestFitPosition(&(mem->board),processes[i].frames);
 							else pos = findWorstFitPosition(&(mem->board),processes[i].frames);
