@@ -97,32 +97,39 @@ position findNextFitPosition(char ***board, int frames,
     return (position) {};
 }
 
-position findBestFitPosition(char*** board, int frames) { // best-fit algorithm for returning the starting position of the smallest fitting free partition
-	char ** temp = *board;
-	int i,j;
-	int min_size = (LINES * FRAMES_PER_LINE) + 1, size = 0, free_space = 0;
-	position pos = {.x = 0, .y = 0};
-	for (i = 0; i < LINES; i++) {
-		for (j = 0; j < FRAMES_PER_LINE; j++) {
-			if (temp[i][j] == '.') { // if space is empty
-				++size;
-				++free_space;
-			} else { // if space is used
-				if (size != 0) { // free space ends
-					if (min_size > size && size >= frames) {
-						min_size = size;
-						pos = (position){.x = (((FRAMES_PER_LINE * i) + j - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * i) + j - size) % FRAMES_PER_LINE)}; // obtains the first free space position in free space segment
-					} else size = 0; // moving through used memory
-				}
-			}
-		}
-	}
-	if (min_size > size && size >= frames) return (position){.x = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) / FRAMES_PER_LINE), .y = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) % FRAMES_PER_LINE)}; // if very last free space is sufficient
-	if (min_size != ((LINES * FRAMES_PER_LINE) + 1) && min_size >= frames) return pos; // if changed minimum size position meets criteria
-	else {
-		if (free_space >= frames) return (position){.x = -2, .y = -2}; // defragment memory
-		return (position){.x = -1, .y = -1}; // no space left for process
-	}
+position findBestFitPosition(char ***board,
+                             int frames) { // best-fit algorithm for returning the starting position of the smallest fitting free partition
+    char **temp = *board;
+    int i, j;
+    int min_size = (LINES * FRAMES_PER_LINE) + 1, size = 0, free_space = 0;
+    position pos = {.x = 0, .y = 0};
+    for (i = 0; i < LINES; i++) {
+        for (j = 0; j < FRAMES_PER_LINE; j++) {
+            if (temp[i][j] == '.') { // if space is empty
+                ++size;
+                ++free_space;
+            } else { // if space is used
+                if (size != 0) { // free space ends
+                    if (min_size > size && size >= frames) {
+                        min_size = size;
+                        pos = (position) {.x = (((FRAMES_PER_LINE * i) + j - size) / FRAMES_PER_LINE), .y = (
+                                ((FRAMES_PER_LINE * i) + j - size) %
+                                FRAMES_PER_LINE)}; // obtains the first free space position in free space segment
+                    } else size = 0; // moving through used memory
+                }
+            }
+        }
+    }
+    if (min_size > size && size >= frames)
+        return (position) {.x = (((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) / FRAMES_PER_LINE), .y = (
+                ((FRAMES_PER_LINE * (LINES - 1)) + FRAMES_PER_LINE - size) %
+                FRAMES_PER_LINE)}; // if very last free space is sufficient
+    if (min_size != ((LINES * FRAMES_PER_LINE) + 1) && min_size >= frames)
+        return pos; // if changed minimum size position meets criteria
+    else {
+        if (free_space >= frames) return (position) {.x = -2, .y = -2}; // defragment memory
+        return (position) {.x = -1, .y = -1}; // no space left for process
+    }
 }
 
 position findWorstFitPosition(char ***board,
