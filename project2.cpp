@@ -89,7 +89,7 @@ void printBoard(char ***board) {
 
 void resize(process **processes, int *capacity) { // increases array size by 100
     *capacity += 100;
-    *processes = realloc(*processes, (*capacity) * (sizeof(process)));
+    *processes = static_cast<process *>(realloc(*processes, (*capacity) * (sizeof(process))));
 }
 
 position findNextFitPosition(char ***board, int frames,
@@ -318,8 +318,13 @@ void contiguous(process **parsed_processes, int n, int t_memmove) { // simulates
 #endif
         memory *mem = (memory *) calloc(1, sizeof(memory));
         mem->board = createBoard();
-        printf("time %dms: Simulator started (Contiguous -- %s)\n", t,
-               alg == 0 ? "Next-Fit" : alg == 1 ? "Best-Fit" : "Worst-Fit");
+        if (alg == 0) {
+            printf("time %dms: Simulator started (Contiguous -- %s)\n", t,
+                   "Next-Fit");
+        } else {
+            printf("time %dms: Simulator started (Contiguous -- %s)\n", t,
+                   alg == 1 ? "Best-Fit" : "Worst-Fit");
+        }
         fflush(stdout);
         while (terminated < n) { // begins simulation
             for (i = 0; i < n - terminated; i++) { // loop for processes leaving
@@ -403,8 +408,57 @@ void contiguous(process **parsed_processes, int n, int t_memmove) { // simulates
     }
 }
 
-void noncontiguous(process **processes, int n) { // simulates non-contiguous memory managment
-    // TODO
+void noncontiguous(process **parsed_processes, int n) { // simulates non-contiguous memory managment
+    process *processes = (process *) calloc((size_t) n, sizeof(process));
+    memcpy(processes, *parsed_processes, sizeof(process) * n);
+    int i, j, t = 0, terminated = 0;
+
+#ifdef DEBUG_MODE
+    printf("\nprocesses copied: %d\n",n);
+    debugPrintProcesses(&processes,n);
+#endif
+    memory *mem = (memory *) calloc(1, sizeof(memory));
+    mem->board = createBoard();
+    printf("time %dms: Simulator started (Non-contiguous)\n", t);
+    while (terminated < n) {// begins simulation
+        for (i = 0; i < n - terminated; i++) { // loop for processes leaving
+            if (processes[i].update_time == t && processes[i].state == RUNNING) {
+                printf("time %dms: Process %c removed:\n", t, processes[i].proc_id);
+                fflush(stdout);
+                position pos = (position) {.x = processes[i].x, .y = processes[i].y};
+                placeProcess(&(mem->board), pos, '.', processes[i].frames);
+#ifdef DEBUG_MODE
+                printf("\ntime %dms: processes before remove: %d\n",t,n - terminated);
+                debugPrintProcesses(&processes,n - terminated);
+#endif
+                for (j = i; j < n - terminated - 1; j++) processes[j] = processes[j + 1];
+                --i;
+                ++terminated;
+#ifdef DEBUG_MODE
+                printf("\ntime %dms: processes after remove: %d\n",t,n - terminated);
+                debugPrintProcesses(&processes,n - terminated);
+#endif
+                continue;
+            }
+        }
+
+        for (i = 0; i < n - terminated; i++) { // loop for processes arriving
+            if (processes[i].arr_time == t && processes[i].state == ARRIVING) { // process has arrived
+                printf("time %dms: Process %c arrived (requires %d frames)\n", t, processes[i].proc_id,
+                       processes[i].frames);
+                fflush(stdout);
+                position pos;
+                printf("time %dms: Placed process %c:\n", t, processes[i].proc_id);
+                fflush(stdout);
+                processes[i].x = pos.x;
+                processes[i].y = pos.y;
+                processes[i].state = RUNNING;
+                processes[i].update_time = t + processes[i].run_time;
+            }
+        }
+        if (terminated == n) break; // ends simulation when all processes have been terminated
+        t++;
+    }
 }
 
 int main(int argc, char const *argv[]) {
@@ -416,7 +470,7 @@ int main(int argc, char const *argv[]) {
     int t_memmove = 1; // time required to move one frame of memory (in milliseconds)
     process *processes = fileParser(&n, &argv[1]);
     contiguous(&processes, n, t_memmove);
-    noncontiguous(&processes, n);
+//    noncontiguous(&processes, n);
     free(processes);
     return EXIT_SUCCESS;
 }

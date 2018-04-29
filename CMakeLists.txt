@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
-project(Memory_Management C)
+project(Memory_Management)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 98)
 
-add_executable(Memory_Management
-        project2.c)
+add_executable(Memory_Management project2.cpp)
