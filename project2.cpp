@@ -2,10 +2,11 @@
 // Xiao Jiang <jiangx5>
 // Ruowen Qin <qinr>
 
-#include <stdio.h>
-#include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
+#include <map>
 
 #define FRAMES_PER_LINE 32
 #define LINES 8
@@ -406,6 +407,10 @@ void contiguous(process **parsed_processes, int n, int t_memmove) { // simulates
         freeBoard(&(mem->board));
         free(mem);
     }
+}
+
+int findPlace(char ***board) { // find the first empty places
+
 }
 
 void noncontiguous(process **parsed_processes, int n) { // simulates non-contiguous memory managment
