@@ -684,7 +684,6 @@ void noncontiguous(process **parsed_processes, int n) { // simulates non-contigu
 	printf("time %dms: Simulator ended (Non-contiguous)", t);
 }
 
-
 int main(int argc, char const *argv[]) {
 	if (argc < 2) { // error handling for command-line arguments
 		fprintf(stderr, "ERROR: Invalid arugment(s)\nUSAGE: ./a.out <input-file>\n");
