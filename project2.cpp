@@ -87,7 +87,7 @@ void printBoard(char ***board) {
 
 void resize(process **processes, int *capacity) { // increases array size by 100
 	*capacity += 100;
-	*processes = realloc(*processes, (*capacity) * (sizeof(process)));
+	*processes = static_cast<process *>(realloc(*processes, (*capacity) * (sizeof(process))));
 }
 
 /*
@@ -116,10 +116,9 @@ position findNextFitPosition(char** board, int frames, process* processes, int l
 	#endif 
 	int length=0;
 	int space=0;
-	int i,j;
 	//move end_x, end_y through the board while exploring
-	for (i = last_x; i < LINES; ++i) {
-		for (j = 0; j < FRAMES_PER_LINE; ++j) {
+	for (int i = last_x; i < LINES; ++i) {
+		for (int j = 0; j < FRAMES_PER_LINE; ++j) {
 			if (i==last_x && j<last_y){continue;}
 			if (board[i][j]!='.'){
 				length=0;
@@ -152,8 +151,8 @@ position findNextFitPosition(char** board, int frames, process* processes, int l
 	start_x=0;
 	start_y=0;
 	length=0;
-	for (i = 0; i < LINES; ++i) {
-		for (j = 0; j < FRAMES_PER_LINE; ++j) {
+	for (int i = 0; i < LINES; ++i) {
+		for (int j = 0; j < FRAMES_PER_LINE; ++j) {
 			if (i==last_x && j==last_y) {
 				if (space>=frames) return (position){.x=-2, .y=-2};
 				else return (position) {.x=-1,.y=-1};
@@ -472,7 +471,6 @@ void contiguous(process **parsed_processes, int n, int t_memmove) { // simulates
 	}
 }
 
-
 //
 // Created by Ruowen Qin on 2018/4/29.
 //
@@ -493,9 +491,8 @@ position findPlace(char ***board) { // find the first empty places
 }
 
 void processLeave(char ***board, position pos, char id, int frames) {
-	int i,j;
-	for (i = pos.y; i < LINES; ++i) {
-		for (j = 0; j < FRAMES_PER_LINE; ++j) {
+	for (int i = pos.y; i < LINES; ++i) {
+		for (int j = 0; j < FRAMES_PER_LINE; ++j) {
 			if ((*board)[i][j] == id && frames != 0) {
 				(*board)[i][j] = '.';
 				frames--;
@@ -503,6 +500,7 @@ void processLeave(char ***board, position pos, char id, int frames) {
 		}
 	}
 	printBoard(board);
+
 }
 
 void placeProcess_Non(char ***board, position pos, char id, int frames) { // places process in memory board
@@ -584,7 +582,7 @@ void pageTablePrint(char ***board, int n) {
 			for (j = 0; j < FRAMES_PER_LINE; ++j) {
 				if ((*board)[i][j] == idList[k]) {
 					count_10++;
-					printf("%s[%d,%d]", count_10 == 1 ? "" : " ", count_ID, i * FRAMES_PER_LINE + j);
+					printf("[%d,%d] ", count_ID, i * FRAMES_PER_LINE + j);
 					fflush(stdout);
 					count_ID++;
 					if (count_10 == 10) {
@@ -683,7 +681,7 @@ void noncontiguous(process **parsed_processes, int n) { // simulates non-contigu
 		if (terminated == n) break; // ends simulation when all processes have been terminated
 		t++;
 	}
-	printf("time %dms: Simulator ended (Non-contiguous)\n", t);
+	printf("time %dms: Simulator ended (Non-contiguous)", t);
 }
 
 int main(int argc, char const *argv[]) {
