@@ -3,4 +3,4 @@ project(Memory_Management)
 
 set(CMAKE_CXX_STANDARD 98)
 set(CMAKE_CXX_FLAGS "-Wall")
-add_executable(Memory_Management project2.cpp)
+add_executable(Memory_Management project2.cpp temp.c)
