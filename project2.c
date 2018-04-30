@@ -87,7 +87,7 @@ void printBoard(char ***board) {
 
 void resize(process **processes, int *capacity) { // increases array size by 100
 	*capacity += 100;
-	*processes = static_cast<process *>(realloc(*processes, (*capacity) * (sizeof(process))));
+	*processes = realloc(*processes, (*capacity) * (sizeof(process)));
 }
 
 /*
@@ -116,9 +116,10 @@ position findNextFitPosition(char** board, int frames, process* processes, int l
 	#endif 
 	int length=0;
 	int space=0;
+	int i,j;
 	//move end_x, end_y through the board while exploring
-	for (int i = last_x; i < LINES; ++i) {
-		for (int j = 0; j < FRAMES_PER_LINE; ++j) {
+	for (i = last_x; i < LINES; ++i) {
+		for (j = 0; j < FRAMES_PER_LINE; ++j) {
 			if (i==last_x && j<last_y){continue;}
 			if (board[i][j]!='.'){
 				length=0;
@@ -151,8 +152,8 @@ position findNextFitPosition(char** board, int frames, process* processes, int l
 	start_x=0;
 	start_y=0;
 	length=0;
-	for (int i = 0; i < LINES; ++i) {
-		for (int j = 0; j < FRAMES_PER_LINE; ++j) {
+	for (i = 0; i < LINES; ++i) {
+		for (j = 0; j < FRAMES_PER_LINE; ++j) {
 			if (i==last_x && j==last_y) {
 				if (space>=frames) return (position){.x=-2, .y=-2};
 				else return (position) {.x=-1,.y=-1};
